@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>薪水秒數顯示器優化版</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #111;
+      color: #f5f5f5;
+      padding: 2rem;
+      text-align: center;
+    }
+    .container {
+      max-width: 400px;
+      margin: auto;
+      padding: 2rem;
+      background: #222;
+      border-radius: 12px;
+    }
+    button, input {
+      width: 100%;
+      padding: 0.6rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      border: none;
+      background: #333;
+      color: #fff;
+    }
+    button:hover {
+      filter: brightness(1.1);
+    }
+    .reset-btn, .save-btn {
+      width: auto;
+      padding: 0.4rem 0.8rem;
+      margin: 0.2rem;
+      background: #FB8C00;
+      cursor: pointer;
+    }
+    .hidden {
+      display: none;
+    }
+    .top-buttons {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .top-buttons button {
+      flex: 1;
+    }
+    .weekday-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.3rem;
+      margin-bottom: 1rem;
+    }
+    .weekday-button {
+      flex: 1 0 28%;
+      padding: 0.4rem;
+      background: #333;
+      color: white;
+      border-radius: 6px;
+      border: 2px solid #FB8C00;
+      cursor: pointer;
+    }
+    .weekday-button.selected {
+      background: #FB8C00;
+      color: white;
+    }
+    .action-buttons {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .action-buttons button {
+      flex: 1;
+      margin-bottom: 0;
+    }
+    #display {
+      font-size: 1.8rem;
+      font-weight: bold;
+      margin: 1rem 0;
+    }
+    #totalSavings {
+      font-size: 1rem;
+      color: #FFD54F;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="mainPage">
+    <h1>💸 薪水秒數顯示器優化版</h1>
+    <div class="top-buttons">
+      <button onclick="switchPage('settingsPage')">⚙️ 設定上班資訊</button>
+      <button onclick="switchPage('motivationPage')">🎯 設定動力目標</button>
+      <button onclick="resetAllData()">🧹 重置（清空累積存款與目標）</button>
+    </div>
+    <div id="display">今日賺取: NT$0.00</div>
+    <div>
+      <button class="reset-btn" onclick="resetEarnings()">🔄 重置</button>
+      <button class="save-btn" onclick="saveEarnings()">💾 存錢</button>
+    </div>
+    <div id="totalSavings"></div>
+  </div>
+
+  <div class="container hidden" id="settingsPage">
+    <h1>⚙️ 上班資訊設定</h1>
+    <label>月薪 (NT$)</label>
+    <input id="monthlySalary" type="number" value="50000">
+    <label>上班開始時間</label>
+    <input type="time" id="startTime" value="08:30">
+    <label>下班結束時間</label>
+    <input type="time" id="endTime" value="18:30">
+    <label>選擇工作日</label>
+    <div class="weekday-buttons">
+      <button class="weekday-button selected" data-day="1">一</button>
+      <button class="weekday-button selected" data-day="2">二</button>
+      <button class="weekday-button selected" data-day="3">三</button>
+      <button class="weekday-button selected" data-day="4">四</button>
+      <button class="weekday-button selected" data-day="5">五</button>
+      <button class="weekday-button selected" data-day="6">六</button>
+      <button class="weekday-button selected" data-day="0">日</button>
+    </div>
+    <div class="action-buttons">
+      <button onclick="saveSettings()">✅ 儲存並開始計算</button>
+      <button onclick="switchPage('mainPage')">⬅️ 回到主頁</button>
+    </div>
+  </div>
+
+  <div class="container hidden" id="motivationPage">
+    <h1>🎯 動力目標設定</h1>
+    <input id="motivationName" type="text" placeholder="目標名稱">
+    <input id="motivationAmount" type="number" placeholder="目標金額">
+    <button onclick="addMotivation()">新增目標</button>
+    <div id="motivationList"></div>
+    <button style="margin-top: 1rem;" onclick="switchPage('mainPage')">⬅️ 回到主頁</button>
+  </div>
+
+  <script>
+    let salary, earnedToday = 0, perSecond, config;
+    let motivations = JSON.parse(localStorage.getItem('motivations')) || [];
+    let workdays = [1, 2, 3, 4, 5, 6, 0];
+    let totalSavings = parseFloat(localStorage.getItem('totalSavings')) || 0;
+
+    function updateDisplay() {
+      document.getElementById('display').innerText = `今日賺取: NT$${earnedToday.toFixed(2)}`;
+      document.getElementById('totalSavings').innerText = `累積存款：NT$${totalSavings.toFixed(2)}`;
+    }
+
+    function saveEarnings() {
+      totalSavings += earnedToday;
+      localStorage.setItem('totalSavings', totalSavings.toFixed(2));
+      earnedToday = 0;
+      updateDisplay();
+      renderMotivations();
+    }
+
+    function resetAllData() {
+      totalSavings = 0;
+      earnedToday = 0;
+      motivations = [];
+      localStorage.removeItem('totalSavings');
+      localStorage.removeItem('motivations');
+      updateDisplay();
+      renderMotivations();
+      document.getElementById('motivationName').value = '';
+      document.getElementById('motivationAmount').value = '';
+    }
+
+    function resetEarnings() {
+      earnedToday = 0;
+      updateDisplay();
+    }
+
+    function saveSettings() {
+      salary = parseFloat(document.getElementById('monthlySalary').value);
+      const [sh, sm] = document.getElementById('startTime').value.split(':').map(Number);
+      const [eh, em] = document.getElementById('endTime').value.split(':').map(Number);
+      const workSeconds = (eh * 3600 + em * 60) - (sh * 3600 + sm * 60);
+      const workHoursPerDay = workSeconds / 3600;
+      const monthlyWorkDays = 22;
+      perSecond = salary / (monthlyWorkDays * workHoursPerDay * 3600);
+      config = {
+        startSec: sh * 3600 + sm * 60,
+        endSec: eh * 3600 + em * 60,
+        workdays: [...workdays]
+      };
+
+      if (window.intervalId) clearInterval(window.intervalId);
+
+      earnedToday = 0;
+      window.intervalId = setInterval(() => {
+        const now = new Date();
+        const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+        const nowDay = now.getDay();
+        if (config.workdays.includes(nowDay) && nowSec >= config.startSec && nowSec <= config.endSec) {
+          earnedToday += perSecond;
+          updateDisplay();
+          renderMotivations();
+        }
+      }, 1000);
+
+      switchPage('mainPage');
+    }
+
+    function addMotivation() {
+      const name = document.getElementById('motivationName').value;
+      const amount = parseFloat(document.getElementById('motivationAmount').value);
+      if (!name || isNaN(amount)) return alert('請輸入完整的目標資訊');
+      motivations.push({ name, amount });
+      localStorage.setItem('motivations', JSON.stringify(motivations));
+      renderMotivations();
+      document.getElementById('motivationName').value = '';
+      document.getElementById('motivationAmount').value = '';
+    }
+
+    function renderMotivations() {
+      const container = document.getElementById('motivationList');
+      container.innerHTML = motivations.map(m => {
+        const reached = totalSavings >= m.amount ? '✅' : (earnedToday >= m.amount ? '🟡' : '⏳');
+        return `<div>${reached} ${m.name}: NT$${m.amount}</div>`;
+      }).join('');
+    }
+
+    function switchPage(targetId) {
+      ['mainPage', 'settingsPage', 'motivationPage'].forEach(id => {
+        document.getElementById(id).classList.add('hidden');
+      });
+      document.getElementById(targetId).classList.remove('hidden');
+    }
+
+    document.querySelectorAll('.weekday-button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        btn.classList.toggle('selected');
+        const day = parseInt(btn.dataset.day);
+        if (btn.classList.contains('selected')) {
+          if (!workdays.includes(day)) workdays.push(day);
+        } else {
+          workdays = workdays.filter(d => d !== day);
+        }
+      });
+    });
+
+    updateDisplay();
+    renderMotivations();
+  </script>
+</body>
+</html>
